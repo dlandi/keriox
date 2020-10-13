@@ -2,6 +2,10 @@ use crate::prefix::{
     AttachedSignaturePrefix, IdentifierPrefix, Prefix, SelfAddressingPrefix, SelfSigningPrefix,
 };
 use chrono::prelude::*;
+use std::convert::TryFrom;
+
+// #[cfg(feature = "lmdb")]
+pub mod lmdb;
 
 pub trait MapTable<K, V> {
     type Error;
