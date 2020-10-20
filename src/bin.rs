@@ -23,7 +23,7 @@ use std::{
     collections::HashMap,
     io::prelude::*,
     net::{SocketAddr, TcpListener, TcpStream},
-    str::from_utf8_unchecked,
+    str::from_utf8,
 };
 use ursa::{
     keys::{PrivateKey, PublicKey},
@@ -268,23 +268,25 @@ fn main() -> ! {
         "------\ninitial local state: {}\n",
         to_string_pretty(&i.state).unwrap()
     );
-    println!("sent:\n{}", unsafe { from_utf8_unchecked(&i.state.last) });
+    println!(
+        "sent:\n{}",
+        from_utf8(&i.log.last().unwrap().serialize().unwrap()).unwrap()
+    );
 
     loop {
         // read incoming
         stream.read(&mut buf).unwrap();
 
         // TODO HACK NOT GOOD but otherwise the parsing functions need to be refactored to take &[u8]
-        let evs = signed_event_stream(unsafe { from_utf8_unchecked(&buf) })
-            .unwrap()
-            .1;
+        let evs = signed_event_stream(from_utf8(&buf).unwrap()).unwrap().1;
 
         for ev in evs {
             match ev.event_message.event.event_data {
                 EventData::Vrc(_) => {
-                    println!("------\nreceived receipt:\n{}", unsafe {
-                        from_utf8_unchecked(&ev.serialize().unwrap())
-                    });
+                    println!(
+                        "------\nreceived receipt:\n{}",
+                        from_utf8(&ev.serialize().unwrap()).unwrap()
+                    );
                     i.add_sig(&they, ev).unwrap();
                     i.rotate().unwrap();
                     println!(
@@ -292,14 +294,16 @@ fn main() -> ! {
                         to_string_pretty(&i.state).unwrap()
                     );
                     stream.write(&i.state.last).unwrap();
-                    println!("------\nsent:\n{}", unsafe {
-                        from_utf8_unchecked(&i.log.last().unwrap().serialize().unwrap())
-                    });
+                    println!(
+                        "------\nsent:\n{}",
+                        from_utf8(&i.log.last().unwrap().serialize().unwrap()).unwrap()
+                    );
                 }
                 _ => {
-                    println!("------\nreceived event:\n{}", unsafe {
-                        from_utf8_unchecked(&ev.serialize().unwrap())
-                    });
+                    println!(
+                        "------\nreceived event:\n{}",
+                        from_utf8(&ev.serialize().unwrap()).unwrap()
+                    );
                     they = they.verify_and_apply(&ev).unwrap();
                     println!(
                         "------\nnew remote state: {}\n",
@@ -308,9 +312,7 @@ fn main() -> ! {
                     // send receipt
                     let rct = i.make_rct(ev.event_message).unwrap();
                     let rct_s = rct.serialize().unwrap();
-                    println!("------\nsending receipt: {}\n", unsafe {
-                        from_utf8_unchecked(&rct_s)
-                    });
+                    println!("------\nsending receipt: {}\n", from_utf8(&rct_s).unwrap());
                     stream.write(&rct_s).unwrap();
                 }
             }
