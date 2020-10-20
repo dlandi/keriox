@@ -46,7 +46,7 @@ impl From<SequenceIndex<'_>> for Vec<u8> {
     }
 }
 
-impl<'a> EventDatabase<'a> for LmdbEventDatabase {
+impl EventDatabase for LmdbEventDatabase {
     type Error = StoreError;
 
     fn last_event_at_sn(
@@ -100,16 +100,13 @@ impl<'a> EventDatabase<'a> for LmdbEventDatabase {
         let key: Vec<u8> = ContentIndex(pref, dig).into();
 
         // insert timestamp for event
-        self.datetime_stamps.put(
-            &mut writer,
-            &key,
-            &Value::Blob(Utc::now().to_rfc3339().as_bytes()),
-        )?;
+        self.datetime_stamps
+            .put(&mut writer, &key, &Value::Str(&Utc::now().to_rfc3339()))?;
 
         // insert signatures for event
         for sig in sigs.iter() {
             self.signatures
-                .put(&mut writer, &key, &Value::Blob(sig.to_str().as_bytes()))?;
+                .put(&mut writer, &key, &Value::Str(&sig.to_str()))?;
         }
 
         // insert event itself
@@ -199,6 +196,26 @@ impl<'a> EventDatabase<'a> for LmdbEventDatabase {
     }
 
     fn add_nt_receipt_for_event(
+        &self,
+        pref: &IdentifierPrefix,
+        dig: &SelfAddressingPrefix,
+        signer: &IdentifierPrefix,
+        sig: &AttachedSignaturePrefix,
+    ) -> Result<(), Self::Error> {
+        let lock = self.env.read()?;
+        let mut writer = lock.write()?;
+        let key: Vec<u8> = ContentIndex(pref, dig).into();
+
+        self.duplicitous_events.put(
+            &mut writer,
+            &key,
+            &Value::Str(&[signer.to_str(), sig.to_str()].concat()),
+        )?;
+
+        writer.commit()
+    }
+
+    fn add_t_receipt_for_event(
         &self,
         pref: &IdentifierPrefix,
         dig: &SelfAddressingPrefix,
