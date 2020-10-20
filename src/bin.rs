@@ -18,6 +18,7 @@ use keri::{
     state::IdentifierState,
     util::dfs_serializer,
 };
+use serde_json::to_string_pretty;
 use std::{
     collections::HashMap,
     io::prelude::*,
@@ -263,7 +264,10 @@ fn main() -> ! {
     stream
         .write(&i.log.last().unwrap().serialize().unwrap())
         .unwrap();
-    println!("------\ninitial local state: {:?}\n", i.state);
+    println!(
+        "------\ninitial local state: {}\n",
+        to_string_pretty(&i.state).unwrap()
+    );
     println!("sent:\n{}", unsafe { from_utf8_unchecked(&i.state.last) });
 
     loop {
@@ -278,13 +282,23 @@ fn main() -> ! {
         match ev.event_message.event.event_data {
             EventData::Vrc(_) => {
                 i.add_sig(&they, ev).unwrap();
+                println!("received receipt:\n{}", unsafe {
+                    from_utf8_unchecked(&i.state.last)
+                });
                 i.rotate().unwrap();
-                println!("------\nnew local state: {:?}\n", i.state);
+                println!(
+                    "------\nnew local state: {}\n",
+                    to_string_pretty(&i.state).unwrap()
+                );
                 stream.write(&i.state.last).unwrap();
             }
             _ => {
                 they = they.verify_and_apply(&ev).unwrap();
-                println!("------\nnew remote state: {:?}\n", they);
+                println!(
+                    "------\nnew remote state: {}\n",
+                    to_string_pretty(&they).unwrap()
+                );
+                // de-escrow receipts
             }
         }
     }
