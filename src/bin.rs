@@ -11,7 +11,7 @@ use keri::{
         Event,
     },
     event_message::{
-        parse::signed_message, serialization_info::SerializationFormats, EventMessage,
+        parse::signed_event_stream, serialization_info::SerializationFormats, EventMessage,
         SignedEventMessage,
     },
     prefix::{AttachedSignaturePrefix, IdentifierPrefix, Prefix, SelfAddressingPrefix},
@@ -275,30 +275,44 @@ fn main() -> ! {
         stream.read(&mut buf).unwrap();
 
         // TODO HACK NOT GOOD but otherwise the parsing functions need to be refactored to take &[u8]
-        let ev = signed_message(unsafe { from_utf8_unchecked(&buf) })
+        let evs = signed_event_stream(unsafe { from_utf8_unchecked(&buf) })
             .unwrap()
             .1;
 
-        match ev.event_message.event.event_data {
-            EventData::Vrc(_) => {
-                i.add_sig(&they, ev).unwrap();
-                println!("received receipt:\n{}", unsafe {
-                    from_utf8_unchecked(&i.state.last)
-                });
-                i.rotate().unwrap();
-                println!(
-                    "------\nnew local state: {}\n",
-                    to_string_pretty(&i.state).unwrap()
-                );
-                stream.write(&i.state.last).unwrap();
-            }
-            _ => {
-                they = they.verify_and_apply(&ev).unwrap();
-                println!(
-                    "------\nnew remote state: {}\n",
-                    to_string_pretty(&they).unwrap()
-                );
-                // de-escrow receipts
+        for ev in evs {
+            match ev.event_message.event.event_data {
+                EventData::Vrc(_) => {
+                    println!("------\nreceived receipt:\n{}", unsafe {
+                        from_utf8_unchecked(&ev.serialize().unwrap())
+                    });
+                    i.add_sig(&they, ev).unwrap();
+                    i.rotate().unwrap();
+                    println!(
+                        "------\nnew local state: {}\n",
+                        to_string_pretty(&i.state).unwrap()
+                    );
+                    stream.write(&i.state.last).unwrap();
+                    println!("------\nsent:\n{}", unsafe {
+                        from_utf8_unchecked(&i.log.last().unwrap().serialize().unwrap())
+                    });
+                }
+                _ => {
+                    println!("------\nreceived event:\n{}", unsafe {
+                        from_utf8_unchecked(&ev.serialize().unwrap())
+                    });
+                    they = they.verify_and_apply(&ev).unwrap();
+                    println!(
+                        "------\nnew remote state: {}\n",
+                        to_string_pretty(&they).unwrap()
+                    );
+                    // send receipt
+                    let rct = i.make_rct(ev.event_message).unwrap();
+                    let rct_s = rct.serialize().unwrap();
+                    println!("------\nsending receipt: {}\n", unsafe {
+                        from_utf8_unchecked(&rct_s)
+                    });
+                    stream.write(&rct_s).unwrap();
+                }
             }
         }
     }
